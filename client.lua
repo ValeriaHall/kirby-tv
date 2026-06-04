@@ -8,36 +8,38 @@ function GetNearbyDevices()
     local ped = PlayerPedId()
     local pedCoords = GetEntityCoords(ped)
     nearbyDevices = {}
+    local searchDistance = Config.InteractionDistance
     
-    -- Check all props in scene
-    local handle, entity = FindFirstObject()
-    local success = true
-    
-    repeat
-        if DoesEntityExist(entity) then
-            local entityModel = GetEntityModel(entity)
-            local entityCoords = GetEntityCoords(entity)
-            local distance = #(pedCoords - entityCoords)
-            
-            -- Check if entity is a known prop
-            if distance < Config.InteractionDistance then
-                for _, propName in ipairs(Config.Props) do
-                    if GetHashKey(propName) == entityModel then
+    -- Search for each prop model
+    for _, propName in ipairs(Config.Props) do
+        local modelHash = GetHashKey(propName)
+        local nearbyHandle = StartFindingObjects(modelHash)
+        local success = true
+        
+        repeat
+            local object = FindNextObject(nearbyHandle)
+            if object ~= 0 then
+                if DoesEntityExist(object) then
+                    local objectCoords = GetEntityCoords(object)
+                    local distance = #(pedCoords - objectCoords)
+                    
+                    if distance < searchDistance then
                         table.insert(nearbyDevices, {
-                            entity = entity,
+                            entity = object,
                             model = propName,
-                            coords = entityCoords,
+                            coords = objectCoords,
                             distance = distance
                         })
-                        break
                     end
                 end
+            else
+                success = false
             end
-        end
-        success, entity = FindNextObject(handle)
-    until not success
+        until not success
+        
+        EndFindObject(nearbyHandle)
+    end
     
-    EndFindObject(handle)
     return nearbyDevices
 end
 
@@ -173,7 +175,7 @@ RegisterCommand('tvplay', function(source, args, rawCommand)
     else
         if Config.EnableNotifications then
             TriggerEvent('chat:addMessage', {
-                args = {"Screen", "^1No nearby screens found!^7"},
+                args = {"Screen", "^1No nearby screens found! Try getting closer (within 3 meters).^7"},
                 color = {255, 0, 0}
             })
         end
@@ -203,7 +205,7 @@ end, false)
 -- Main loop to show device labels
 Citizen.CreateThread(function()
     while true do
-        Wait(0)
+        Wait(100) -- Reduced frequency to avoid performance issues
         
         local devices = GetNearbyDevices()
         
@@ -211,10 +213,11 @@ Citizen.CreateThread(function()
             -- Sort by distance
             table.sort(devices, function(a, b) return a.distance < b.distance end)
             
-            -- Show nearby devices
-            for i, device in ipairs(devices) do
+            -- Show nearby devices (max 5 at a time to reduce clutter)
+            for i = 1, math.min(5, #devices) do
+                local device = devices[i]
                 local label = "[" .. i .. "] " .. device.model .. " - " .. string.format("%.2f", device.distance) .. "m"
-                Draw3DText(device.coords.x, device.coords.y, device.coords.z + 0.3, label)
+                Draw3DText(device.coords.x, device.coords.y, device.coords.z + 0.5, label)
             end
         end
     end
