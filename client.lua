@@ -3,40 +3,45 @@ local tvUrl = ""
 local activeDevices = {}
 local nearbyDevices = {}
 
--- Function to get nearby TV/Computer/Tablet devices using raycasting
+-- Function to get nearby TV/Computer/Tablet devices
 function GetNearbyDevices()
     local ped = PlayerPedId()
     local pedCoords = GetEntityCoords(ped)
     nearbyDevices = {}
     local searchDistance = Config.InteractionDistance
     
-    -- Get all entities in a sphere around the player
-    local entities = GetGamePoolSize('CObject')
+    -- Create a prop hash lookup table for faster search
+    local propHashes = {}
+    for _, propName in ipairs(Config.Props) do
+        propHashes[GetHashKey(propName)] = propName
+    end
     
-    for i = 0, entities - 1 do
-        local entity = GetEntityPoolObject(i)
-        
-        if DoesEntityExist(entity) then
-            local entityCoords = GetEntityCoords(entity)
-            local distance = #(pedCoords - entityCoords)
-            
-            if distance < searchDistance then
-                local entityModel = GetEntityModel(entity)
+    -- Check all objects using EntityEnumerator
+    local handle = FindFirstObject()
+    local success = true
+    
+    if handle ~= -1 then
+        repeat
+            if DoesEntityExist(handle) then
+                local entityCoords = GetEntityCoords(handle)
+                local distance = #(pedCoords - entityCoords)
                 
-                -- Check against all known props
-                for _, propName in ipairs(Config.Props) do
-                    if GetHashKey(propName) == entityModel then
+                if distance < searchDistance then
+                    local entityModel = GetEntityModel(handle)
+                    
+                    -- Check if this model is in our prop list
+                    if propHashes[entityModel] then
                         table.insert(nearbyDevices, {
-                            entity = entity,
-                            model = propName,
+                            entity = handle,
+                            model = propHashes[entityModel],
                             coords = entityCoords,
                             distance = distance
                         })
-                        break
                     end
                 end
             end
-        end
+            success, handle = FindNextObject(handle)
+        until not success
     end
     
     return nearbyDevices
