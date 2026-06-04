@@ -1,7 +1,7 @@
 fx_version 'cerulean'
 game 'gta5'
 
-author 'Your Name'
+author 'PiperNelson'
 description 'TV Script for FiveM'
 version '1.0.0'
 
