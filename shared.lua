@@ -86,8 +86,8 @@ Config.SupportedPlatforms = {
     "ogg"
 }
 
--- Interaction distance
-Config.InteractionDistance = 3.0
+-- Interaction distance (in meters)
+Config.InteractionDistance = 25.0
 
 -- Enable notifications
 Config.EnableNotifications = true
