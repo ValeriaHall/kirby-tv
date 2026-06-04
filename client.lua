@@ -1,95 +1,157 @@
 local isPlaying = false
 local tvUrl = ""
-local tvHandle = nil
+local activeDevices = {}
+local nearbyDevices = {}
 
--- Function to play TV
-function PlayTV(url)
+-- Function to get nearby TV/Computer/Tablet devices
+function GetNearbyDevices()
+    local ped = PlayerPedId()
+    local pedCoords = GetEntityCoords(ped)
+    nearbyDevices = {}
+    
+    -- Check all props in scene
+    local handle, entity = FindFirstObject()
+    local success = true
+    
+    repeat
+        if DoesEntityExist(entity) then
+            local entityModel = GetEntityModel(entity)
+            local entityCoords = GetEntityCoords(entity)
+            local distance = #(pedCoords - entityCoords)
+            
+            -- Check if entity is a known prop
+            if distance < Config.InteractionDistance then
+                for _, propName in ipairs(Config.Props) do
+                    if GetHashKey(propName) == entityModel then
+                        table.insert(nearbyDevices, {
+                            entity = entity,
+                            model = propName,
+                            coords = entityCoords,
+                            distance = distance
+                        })
+                        break
+                    end
+                end
+            end
+        end
+        success, entity = FindNextObject(handle)
+    until not success
+    
+    EndFindObject(handle)
+    return nearbyDevices
+end
+
+-- Function to draw 3D text
+function Draw3DText(x, y, z, text)
+    local onScreen, _x, _y = World3dToScreen2d(x, y, z)
+    if onScreen then
+        SetTextScale(0.35, 0.35)
+        SetTextFont(4)
+        SetTextProportional(1)
+        SetTextColour(0, 255, 0, 215)
+        SetTextOutline()
+        BeginTextCommandDisplayText("STRING")
+        AddTextComponentString(text)
+        EndTextCommandDisplayText(_x, _y)
+    end
+end
+
+-- Function to play TV/Device
+function PlayDevice(url, deviceEntity)
     if isPlaying then
-        TriggerEvent('chat:addMessage', {
-            args = {"TV", "^1Already playing something!^7"},
-            color = {255, 0, 0}
-        })
+        if Config.EnableNotifications then
+            TriggerEvent('chat:addMessage', {
+                args = {"Screen", "^1Already playing something!^7"},
+                color = {255, 0, 0}
+            })
+        end
         return
     end
 
     if not url or url == "" then
-        TriggerEvent('chat:addMessage', {
-            args = {"TV", "^1Invalid URL provided!^7"},
-            color = {255, 0, 0}
-        })
+        if Config.EnableNotifications then
+            TriggerEvent('chat:addMessage', {
+                args = {"Screen", "^1Invalid URL provided!^7"},
+                color = {255, 0, 0}
+            })
+        end
         return
     end
 
     tvUrl = url
     isPlaying = true
-
-    -- Request the TV model
-    RequestModel(GetHashKey("v_res_m_tv"))
-    while not HasModelLoaded(GetHashKey("v_res_m_tv")) do
-        Wait(0)
+    
+    if deviceEntity then
+        activeDevices[deviceEntity] = {
+            url = url,
+            playing = true
+        }
+    end
+    
+    if Config.EnableNotifications then
+        TriggerEvent('chat:addMessage', {
+            args = {"Screen", "^2Now playing: ^7" .. url},
+            color = {0, 255, 0}
+        })
     end
 
-    local ped = PlayerPedId()
-    local pedCoords = GetEntityCoords(ped)
-
-    -- Spawn TV in front of player
-    tvHandle = CreateObject(GetHashKey("v_res_m_tv"), pedCoords.x, pedCoords.y, pedCoords.z - 1, false, false, false)
-    
-    -- Set TV to play
-    SetBlockingOfNonTemporaryEvents(tvHandle, true)
-    
-    -- Display notification
-    TriggerEvent('chat:addMessage', {
-        args = {"TV", "^2Now playing: ^7" .. url},
-        color = {0, 255, 0}
-    })
-
-    -- Stream the video
-    TriggerServerEvent('tvscript:syncTVStream', url, true)
+    -- Sync with server
+    TriggerServerEvent('tvscript:syncTVStream', url, true, deviceEntity)
 end
 
--- Function to pause TV
-function PauseTV()
+-- Function to pause device
+function PauseDevice(deviceEntity)
     if not isPlaying then
-        TriggerEvent('chat:addMessage', {
-            args = {"TV", "^1Nothing is playing!^7"},
-            color = {255, 0, 0}
-        })
+        if Config.EnableNotifications then
+            TriggerEvent('chat:addMessage', {
+                args = {"Screen", "^1Nothing is playing!^7"},
+                color = {255, 0, 0}
+            })
+        end
         return
     end
 
-    TriggerEvent('chat:addMessage', {
-        args = {"TV", "^3TV paused^7"},
-        color = {255, 165, 0}
-    })
+    if Config.EnableNotifications then
+        TriggerEvent('chat:addMessage', {
+            args = {"Screen", "^3Paused^7"},
+            color = {255, 165, 0}
+        })
+    end
 
-    TriggerServerEvent('tvscript:syncTVStream', tvUrl, false)
+    if deviceEntity and activeDevices[deviceEntity] then
+        activeDevices[deviceEntity].playing = false
+    end
+
+    TriggerServerEvent('tvscript:syncTVStream', tvUrl, false, deviceEntity)
 end
 
--- Function to stop TV
-function StopTV()
+-- Function to stop device
+function StopDevice(deviceEntity)
     if not isPlaying then
-        TriggerEvent('chat:addMessage', {
-            args = {"TV", "^1Nothing is playing!^7"},
-            color = {255, 0, 0}
-        })
+        if Config.EnableNotifications then
+            TriggerEvent('chat:addMessage', {
+                args = {"Screen", "^1Nothing is playing!^7"},
+                color = {255, 0, 0}
+            })
+        end
         return
     end
 
     isPlaying = false
     tvUrl = ""
 
-    if tvHandle ~= nil then
-        DeleteEntity(tvHandle)
-        tvHandle = nil
+    if deviceEntity then
+        activeDevices[deviceEntity] = nil
     end
 
-    TriggerEvent('chat:addMessage', {
-        args = {"TV", "^1TV stopped^7"},
-        color = {255, 0, 0}
-    })
+    if Config.EnableNotifications then
+        TriggerEvent('chat:addMessage', {
+            args = {"Screen", "^1Stopped^7"},
+            color = {255, 0, 0}
+        })
+    end
 
-    TriggerServerEvent('tvscript:syncTVStream', "", false)
+    TriggerServerEvent('tvscript:syncTVStream', "", false, deviceEntity)
 end
 
 -- Commands
@@ -97,34 +159,84 @@ RegisterCommand('tvplay', function(source, args, rawCommand)
     local url = args[1]
     if not url then
         TriggerEvent('chat:addMessage', {
-            args = {"TV", "^1Usage: /tvplay {url}^7"},
+            args = {"Screen", "^1Usage: /tvplay {url}^7"},
             color = {255, 0, 0}
         })
         return
     end
-    PlayTV(url)
+    
+    -- Get nearby devices and play on closest
+    local devices = GetNearbyDevices()
+    if #devices > 0 then
+        table.sort(devices, function(a, b) return a.distance < b.distance end)
+        PlayDevice(url, devices[1].entity)
+    else
+        if Config.EnableNotifications then
+            TriggerEvent('chat:addMessage', {
+                args = {"Screen", "^1No nearby screens found!^7"},
+                color = {255, 0, 0}
+            })
+        end
+    end
 end, false)
 
 RegisterCommand('tvpause', function(source, args, rawCommand)
-    PauseTV()
+    local devices = GetNearbyDevices()
+    if #devices > 0 then
+        table.sort(devices, function(a, b) return a.distance < b.distance end)
+        PauseDevice(devices[1].entity)
+    else
+        PauseDevice(nil)
+    end
 end, false)
 
 RegisterCommand('tvstop', function(source, args, rawCommand)
-    StopTV()
+    local devices = GetNearbyDevices()
+    if #devices > 0 then
+        table.sort(devices, function(a, b) return a.distance < b.distance end)
+        StopDevice(devices[1].entity)
+    else
+        StopDevice(nil)
+    end
 end, false)
+
+-- Main loop to show device labels
+Citizen.CreateThread(function()
+    while true do
+        Wait(0)
+        
+        local devices = GetNearbyDevices()
+        
+        if #devices > 0 then
+            -- Sort by distance
+            table.sort(devices, function(a, b) return a.distance < b.distance end)
+            
+            -- Show nearby devices
+            for i, device in ipairs(devices) do
+                local label = "[" .. i .. "] " .. device.model .. " - " .. string.format("%.2f", device.distance) .. "m"
+                Draw3DText(device.coords.x, device.coords.y, device.coords.z + 0.3, label)
+            end
+        end
+    end
+end)
 
 -- Handle server events
 RegisterNetEvent('tvscript:updateTV')
-AddEventHandler('tvscript:updateTV', function(url, playing)
+AddEventHandler('tvscript:updateTV', function(url, playing, deviceEntity)
     if playing and url ~= "" then
         isPlaying = true
         tvUrl = url
+        if deviceEntity then
+            activeDevices[deviceEntity] = {
+                url = url,
+                playing = true
+            }
+        end
     else
         isPlaying = false
         tvUrl = ""
-        if tvHandle ~= nil then
-            DeleteEntity(tvHandle)
-            tvHandle = nil
+        if deviceEntity then
+            activeDevices[deviceEntity] = nil
         end
     end
 end)
@@ -132,9 +244,7 @@ end)
 -- Cleanup on resource stop
 AddEventHandler('onResourceStop', function(resourceName)
     if GetCurrentResourceName() == resourceName then
-        if tvHandle ~= nil then
-            DeleteEntity(tvHandle)
-            tvHandle = nil
-        end
+        activeDevices = {}
+        nearbyDevices = {}
     end
 end)
