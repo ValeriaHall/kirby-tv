@@ -12,14 +12,6 @@ function PlayDevice(url, entity)
         return
     end
 
-    if not entity or not DoesEntityExist(entity) then
-        TriggerEvent('chat:addMessage', {
-            args = {"Screen", "^1Invalid screen!^7"},
-            color = {255, 0, 0}
-        })
-        return
-    end
-
     tvUrl = url
     targetedEntity = entity
     isPlaying = true
