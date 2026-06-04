@@ -3,41 +3,40 @@ local tvUrl = ""
 local activeDevices = {}
 local nearbyDevices = {}
 
--- Function to get nearby TV/Computer/Tablet devices
+-- Function to get nearby TV/Computer/Tablet devices using raycasting
 function GetNearbyDevices()
     local ped = PlayerPedId()
     local pedCoords = GetEntityCoords(ped)
     nearbyDevices = {}
     local searchDistance = Config.InteractionDistance
     
-    -- Search for each prop model
-    for _, propName in ipairs(Config.Props) do
-        local modelHash = GetHashKey(propName)
-        local nearbyHandle = StartFindingObjects(modelHash)
-        local success = true
+    -- Get all entities in a sphere around the player
+    local entities = GetGamePoolSize('CObject')
+    
+    for i = 0, entities - 1 do
+        local entity = GetEntityPoolObject(i)
         
-        repeat
-            local object = FindNextObject(nearbyHandle)
-            if object ~= 0 then
-                if DoesEntityExist(object) then
-                    local objectCoords = GetEntityCoords(object)
-                    local distance = #(pedCoords - objectCoords)
-                    
-                    if distance < searchDistance then
+        if DoesEntityExist(entity) then
+            local entityCoords = GetEntityCoords(entity)
+            local distance = #(pedCoords - entityCoords)
+            
+            if distance < searchDistance then
+                local entityModel = GetEntityModel(entity)
+                
+                -- Check against all known props
+                for _, propName in ipairs(Config.Props) do
+                    if GetHashKey(propName) == entityModel then
                         table.insert(nearbyDevices, {
-                            entity = object,
+                            entity = entity,
                             model = propName,
-                            coords = objectCoords,
+                            coords = entityCoords,
                             distance = distance
                         })
+                        break
                     end
                 end
-            else
-                success = false
             end
-        until not success
-        
-        EndFindObject(nearbyHandle)
+        end
     end
     
     return nearbyDevices
@@ -205,7 +204,7 @@ end, false)
 -- Main loop to show device labels
 Citizen.CreateThread(function()
     while true do
-        Wait(100) -- Reduced frequency to avoid performance issues
+        Wait(100)
         
         local devices = GetNearbyDevices()
         
@@ -213,7 +212,7 @@ Citizen.CreateThread(function()
             -- Sort by distance
             table.sort(devices, function(a, b) return a.distance < b.distance end)
             
-            -- Show nearby devices (max 5 at a time to reduce clutter)
+            -- Show nearby devices (max 5 at a time)
             for i = 1, math.min(5, #devices) do
                 local device = devices[i]
                 local label = "[" .. i .. "] " .. device.model .. " - " .. string.format("%.2f", device.distance) .. "m"
